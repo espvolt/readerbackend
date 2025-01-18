@@ -1,0 +1,5 @@
+---
+packages:
+- ascii
+- libxml
+- https://example.com/exciting.deb
