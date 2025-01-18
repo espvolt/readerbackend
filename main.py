@@ -12,7 +12,6 @@ import uvicorn
 
 CRED_STRING = "ILOVEYOUNIG"
 
-
 app = FastAPI(swagger_ui_parameters={"syntaxHighlight.theme": "obsidian"})
 
 app.add_middleware(
@@ -131,6 +130,6 @@ async def remove_track_from_playlist(info: PlaylistModifyData):
 async def get_voice_options():
     return {"message": "voices", "voices": list(get_voices())}
 
-# if __name__ == "__main__":
-#     uvicorn.run(app, "0.0.0.0", 8080)
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8080)
     
