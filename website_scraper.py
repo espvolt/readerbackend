@@ -2,13 +2,6 @@ import requests
 from bs4 import BeautifulSoup
 import re
 from pprint import pprint
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-    model_name="gpt-4",
-    chunk_size=25,
-    chunk_overlap=0,
-)
 
 def split_text_to_tokens(text: str) -> list[str]:
     res: list[str] = []
