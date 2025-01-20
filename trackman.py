@@ -1,8 +1,9 @@
 from schemas import PlaylistCreationData, PlaylistDeletionData, PlaylistModifyData, ErrorStuff, GetTrackProgress
 from user import UserMan
-from tts_helper import TTSingle
+from book_tts import BookTTS
 from dataclasses import dataclass
 from copy import deepcopy
+import fileman
 
 @dataclass
 class PlaylistLookupData:
@@ -16,7 +17,7 @@ class Trackman():
 
     def __init__(self):
         self.userman: UserMan = UserMan.get_instance()
-        self.tts: TTSingle = TTSingle.get_instance()
+        self.tts: BookTTS = BookTTS.get_instance()
         self.playlist_map = {} # for faster lookups if ever needed, although could be bulky on memory?
         # possible store playlists in a separate file, but that would require some substantial refactor
 

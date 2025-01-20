@@ -1,6 +1,9 @@
 import wave
 import os
 from pydub import AudioSegment
+import pathlib
+import json
+
 
 OUT_FILE = "fin.wav"
 INITIAL_FILE = "0"
@@ -40,5 +43,33 @@ def get_voices():
 
     return res
 
+def get_json_file_data(path: str, default_data: dict=None): # maybe belongs in fileman
+    path_obj = pathlib.Path(path)
+
+    if (path_obj.exists()):
+        with open(path_obj.as_posix(), "r") as f:
+            try:
+                data = json.load(f)
+
+                return data
+            
+            except json.JSONDecodeError:
+                return default_data
+            
+    else:
+        if (default_data is None):
+            default_data = {}
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(path_obj.as_posix(), "w") as f:
+            json.dump(default_data, f, indent=4)
+
+        return default_data
+    
+def safe_create_folder(path: str):
+    path_obj = pathlib.Path(path)
+
+    path_obj.mkdir(parents=True, exist_ok=True)
+    
 if (__name__ == "__main__"):
     merge_output()

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from tts_helper import TTSingle
+from book_tts import BookTTS
 from user import UserMan
 from trackman import Trackman
 from schemas import *
@@ -23,7 +23,7 @@ app.add_middleware(
 )
 
 # tt_instance = TTSingle.get_instance()
-tt_instance = TTSingle.get_instance(True)
+tt_instance = BookTTS.get_instance(True)
 user_instance = UserMan.get_instance()
 trackman_instance = Trackman.get_instance()
 

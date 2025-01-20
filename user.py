@@ -4,6 +4,7 @@ import dataclasses
 import math
 import time
 from schemas import PlaylistCreationData
+import fileman
 
 @dataclasses.dataclass
 class SessionData:
@@ -18,7 +19,7 @@ class UserMan:
     LAST_LOGIN_TIME = 3 * 24 * 60 * 60
     LAST_SESSION_TIME = 1 * 60 * 60
     current_sessions = 0
-    user_id = 0
+    CURRENT_USER_ID = 0
 
     def __init__(self):
         if (UserMan.INSTANCE is not None):
@@ -29,19 +30,15 @@ class UserMan:
 
 
     def _load_data(self):
-        if (os.path.exists(UserMan.USER_JSON_PATH)):
-            with open(UserMan.USER_JSON_PATH, "r") as f:
-                self.data = json.load(f)
-                UserMan.user_id = self.data["user_id"]
+        default = {
+            "current_user_id": 0,
+            "users": {}
+        }
 
-        else:
-            self.data = {
-                "user_id": UserMan.user_id,
-                "playlist_id": 0,
-                "users": {
+        self.data = fileman.get_json_file_data("./data/users.json", default)
+        UserMan.CURRENT_USER_ID = self.data["current_user_id"]
 
-                }
-            }
+
 
     def _save_data(self):
         if (os.path.exists(UserMan.USER_JSON_PATH)):
@@ -76,40 +73,18 @@ class UserMan:
     def _create_user(self, password: str):
         res = {
             "password": password,
-            "playlists": {},
-            "progress": {},
-            "user_id": UserMan.user_id,
+            "bookmarks": [],
+            "track_progress": {},
+            "current_queue": [],
+            "user_id": UserMan.CURRENT_USER_ID,
             "last_login_key": "",
             "last_login_time": -1,
             "display_name": ""
         }
 
-        UserMan.user_id += 1
-        self.data["user_id"] = UserMan.user_id
+        UserMan.CURRENT_USER_ID += 1
+        self.data["user_id"] = UserMan.CURRENT_USER_ID
         return res
-
-    def attempt_user_signup(self, user: str, password: str):
-        _user = user
-        user = user.lower()
-        enc_pass = self._get_encrypted(user, password)
-
-        if (user in self.data):
-            return None
-        
-        else:
-            self.data["users"][user] = self._create_user(enc_pass)
-            self._save_data()
-            return self._create_session(user, self.data["users"][user]["display_name"])
-
-    def attempt_user_login(self, user: str, password: str):
-        _user = user
-        user = user.lower()
-        enc_pass = self._get_encrypted(user, password)
-
-        if (user in self.data["users"] and self.data["users"][user]["password"] == enc_pass):
-            return self._create_session(user, self.data["users"][user]["display_name"])
-        
-        return None
     
     def _get_encrypted(self, user: str, password: str):
         p = sha3_256(password.encode()).hexdigest()
