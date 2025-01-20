@@ -14,9 +14,8 @@ from book import Book, Chapter
 OUT_FILE = "fin.wav"
 INITIAL_FILE = "0"
 
-def split_text(chapter_text: str):
+def split_text(chapter_text: str) -> list[str]:
     return ["Hello, this is a test."]
-    pass
 
 class BookTTS:
     INSTANCE = None
@@ -140,6 +139,9 @@ class BookTTS:
 
         with self.lock:
             self.book_data["books"][str(BookTTS.CURRENT_BOOK_ID)] = final_book_obj
+            BookTTS.CURRENT_BOOK_ID += 1
+            self.book_data["current_book_id"] = BookTTS.CURRENT_BOOK_ID
+
             self._save_data()
 
         self._finished()
@@ -164,6 +166,8 @@ class BookTTS:
                 "length": chapter_length
             }
             BookTTS.CURRENT_TRACK_ID += 1
+
+            self.track_data["current_track_id"] = BookTTS.CURRENT_TRACK_ID
 
             self._save_data()
 
