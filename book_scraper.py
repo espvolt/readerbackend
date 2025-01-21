@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup, Tag
 import requests
 from book import Book, Chapter
-
+# import book_tts
 class Wikipedia:
     def _decompose_references(tag: Tag):
         for y in tag.find_all(id=lambda attr: attr is not None and attr.startswith("cite_ref")):
@@ -45,7 +45,7 @@ class Wikipedia:
                 if (tag.name == "meta"):
                     current_traversal = tag.findChildren(recursive=False)
                     break
-
+    
                 if (tag.findChild(title="Wikipedia:Citation needed")):
                     Wikipedia._decompose_citation(tag)
                 
@@ -57,6 +57,9 @@ class Wikipedia:
                     if (tag.text.lower() == "see also" or tag.text.lower() == "references"):
                         traveral_finished = True
                         break
+                
+                if (tag.get("role") is not None and tag["role"] == "note"):
+                    continue
                 
                 clean_text = tag.text.strip("\n")
 
@@ -86,4 +89,8 @@ class Wikipedia:
 
 
 if __name__ == "__main__":
-    Wikipedia.scrape("https://en.wikipedia.org/wiki/Lucid_dream")
+    book: Book = Wikipedia.scrape("https://en.wikipedia.org/wiki/Lucid_dream")
+    # import book_tts
+    # for chapter in book.chapters:
+    #     print(book_tts.split_text(chapter.text))
+    #     input()
