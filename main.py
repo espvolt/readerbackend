@@ -128,7 +128,7 @@ async def remove_track_from_playlist(info: PlaylistModifyData):
 
 @app.get("/getvoiceoptions")
 async def get_voice_options():
-    return {"message": "voices", "voices": list(get_voices())}
+    return {"message": "voices", "voices": list(tt_instance.clone_voices.keys())}
 
 # if __name__ == "__main__":
 #     uvicorn.run(app, host="0.0.0.0", port=8080)
