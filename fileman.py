@@ -8,8 +8,7 @@ import json
 OUT_FILE = "fin.wav"
 INITIAL_FILE = "0"
 
-def merge_output() -> float:
-    """returns the length of the output file in seconds"""
+def merge_output_wav():
     first: AudioSegment = AudioSegment.from_wav(f"./output/{INITIAL_FILE}.wav")
     files = os.listdir("./output")
     def f(x: str):
@@ -26,7 +25,31 @@ def merge_output() -> float:
             first = first.append(AudioSegment.from_wav(f"./output/{file}"))
 
     first.export(f"./output/{OUT_FILE}", format="wav")
+
+def merge_output_mp3():
+    first: AudioSegment = AudioSegment.from_mp3(f"./output/{INITIAL_FILE}.mp3")
+    files = os.listdir("./output")
+    def f(x: str):
+        if (x[:-4].isdigit()):
+            return int(x[:-4])
+        else:
+            return -1
+        
+    files.sort(key=f)
+
+    for file in files:
+        if (file != INITIAL_FILE + ".mp3" and file != OUT_FILE and file.endswith(".mp3")):
+            print(file)
+            first = first.append(AudioSegment.from_mp3(f"./output/{file}"))
+
+    first.export(f"./output/{OUT_FILE}", format="wav")
     return len(first) / 1000
+
+def merge_output(format="wav") -> float:
+    if (format == "wav"):
+        return merge_output_wav()
+    else:
+        return merge_output_mp3()
 
 def cleanup():
     for file in os.listdir("./output"):
@@ -59,6 +82,7 @@ def get_json_file_data(path: str, default_data: dict=None): # maybe belongs in f
     else:
         if (default_data is None):
             default_data = {}
+            
         path_obj.parent.mkdir(parents=True, exist_ok=True)
 
         with open(path_obj.as_posix(), "w") as f:

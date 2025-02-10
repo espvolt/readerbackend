@@ -3,8 +3,9 @@ import os, json
 import dataclasses
 import math
 import time
-from schemas import PlaylistCreationData
+from schemas import BookmarkCreateData, ErrorCodes
 import fileman
+from book_tts import BookTTS
 
 @dataclasses.dataclass
 class SessionData:
@@ -26,6 +27,7 @@ class UserMan:
             return
         
         self.data = {}
+        self.tt_instance = BookTTS.get_instance() 
         self.active_sessions: dict[int, SessionData] = {}
 
 
@@ -74,6 +76,7 @@ class UserMan:
         res = {
             "password": password,
             "bookmarks": [],
+            "playlists": [],
             "track_progress": {},
             "current_queue": [],
             "user_id": UserMan.CURRENT_USER_ID,
@@ -83,7 +86,7 @@ class UserMan:
         }
 
         UserMan.CURRENT_USER_ID += 1
-        self.data["user_id"] = UserMan.CURRENT_USER_ID
+        self.data["current_user_id"] = UserMan.CURRENT_USER_ID
         return res
     
     def _get_encrypted(self, user: str, password: str):
@@ -114,6 +117,11 @@ class UserMan:
         current_user = self.data["users"][user]
         match_key = current_user["last_login_key"]
 
+        print(time.time() - current_user["last_login_time"], UserMan.LAST_LOGIN_TIME)
+        print(match_key)
+        print(key)
+        print()
+        
         if (match_key == key and time.time() - current_user["last_login_time"] < UserMan.LAST_LOGIN_TIME):
             return self._create_session(user, current_user["display_name"])
             
@@ -142,4 +150,74 @@ class UserMan:
 
         return False
 
+    def create_bookmark(self, info: BookmarkCreateData):
+        if (not self._does_session_exists(info.username, info.session_id)):
+            return {"message": "session invalid", "success": False, "error_id": ErrorCodes.INVALID_SESSION}
+        
+        self.refresh_session(info.username, info.session_id)
 
+        users = self.data["users"]
+        user_obj = users.get(info.username)
+        
+        if (user_obj is None):
+            return {"message": "user not found", "success": False, "error_id": ErrorCodes.USER_NOT_FOUND}
+        
+        if (info.book_id in user_obj["bookmarks"]):
+            return {"message": "already bookmarked", "success": False, "error_id": ErrorCodes.BOOK_ALREADY_BOOKMARKED}
+        
+        user_obj["bookmarks"].append(info.book_id)
+        self._save_data()
+        
+        return {"message": "bookmarked successfully", "success": True}
+
+    def get_bookmarks(self, username: str): # who tf cares what you got bookmarked, so it doesnt need a session ID
+        """
+        this is part of the public dataset
+        returns data like so
+        [{
+            "book_id": <>,
+            "book_name: <>,
+            "book_progress: <> <- later
+        }]
+        """
+        
+        users = self.data["users"]
+        user_obj = users.get(username)
+        
+        if (user_obj is None):
+            return {"message": "user not found", "success": False, "error_id": ErrorCodes.USER_NOT_FOUND}
+
+        res = []
+
+        for bookmark_id in user_obj["bookmarks"]:
+            if (str(bookmark_id) in self.tt_instance.book_data["books"]): # book does still exist
+                current_book = self.tt_instance.book_data["books"][str(bookmark_id)]
+                res.append({
+                    "book_id": bookmark_id,
+                    "book_name": current_book["title"],
+                    "progress": "TODO"
+                })
+        
+        return {"message": "bookmarks found", "success": True, "bookmarks": res}
+    
+    def remove_bookmark(self, info: BookmarkCreateData):
+        if (not self._does_session_exists(info.username, info.session_id)):
+            return {"message": "session invalid", "success": False, "error_id": ErrorCodes.INVALID_SESSION}
+        
+        self.refresh_session(info.username, info.session_id)
+
+        users = self.data["users"]
+        user_obj = users.get(info.username)
+        
+        if (user_obj is None):
+            return {"message": "user not found", "success": False, "error_id": ErrorCodes.USER_NOT_FOUND}
+        
+        if (info.book_id not in user_obj["bookmarks"]):
+            return {"message": "bookmark not found", "success": False, "error_id": ErrorCodes.BOOK_NOT_BOOKMARKED}
+        
+        user_obj["bookmarks"].remove(info.book_id)
+
+        self._save_data()
+
+        return {"message": "bookmark removed", "success": True}
+                

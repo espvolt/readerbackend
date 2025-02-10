@@ -47,14 +47,14 @@ async def get_selection(name_filter="", tag_filter: list[str]=[]):
     res = {}
 
     if (name_filter == "" and len(tag_filter) == 0):
-        for i in tt_instance.data["selections"]:
-            res[int(i)] = tt_instance.data["selections"][i]
+        for i in tt_instance.book_data["books"]:
+            res[int(i)] = tt_instance.book_data["books"][i]
 
     else:
         tags = set(tag_filter)
 
-        for i in tt_instance.data["selections"]:
-            current = tt_instance.data["selections"][i]
+        for i in tt_instance.book_data["books"]:
+            current = tt_instance.book_data["books"][i]
             display_name: str = current["display_name"]
             current_tags: set[str] = set(current["tags"])
 
@@ -62,16 +62,36 @@ async def get_selection(name_filter="", tag_filter: list[str]=[]):
                 res[int(i)] = current
 
     res = deepcopy(res)
-    _filter_selection(res)
     return res
+
+def get_book_search(name_filter: str, tag_filter: list):
+    if (name_filter == "" and len(tag_filter) == 0):
+        return tt_instance.book_data["books"]
+    
+    else: # for now only tag filter
+        res = {}
+        for i in tt_instance.book_data["books"]:
+            if name_filter.lower() in tt_instance.book_data["books"][i]["title"].lower():
+                print(tt_instance.book_data["books"])
+                res[i] = tt_instance.book_data["books"][i]
+
+        return res
+
+@app.get("/multisearch")
+async def get_multiple_search(name_filter: str="", tag_filter: list[str]=[]):
+    return {"message": "search results",
+            "books": get_book_search(name_filter, tag_filter),
+            "tracks": {}}
+
+
 
 @app.get("/audio")
 async def video_endpoint(id: int):
-    selections = tt_instance.data["selections"]
+    tracks = tt_instance.track_data["tracks"]
 
-    if (str(id) in selections):
+    if (str(id) in tracks):
         def iterfile():
-            with open(f"public/selection/{selections[str(id)]['filename']}", mode="rb") as file_like:
+            with open(tracks[str(id)]["filename"], mode="rb") as file_like:
                 yield from file_like
 
         return StreamingResponse(iterfile(), media_type="audio/wav")
@@ -80,7 +100,7 @@ async def video_endpoint(id: int):
 
 @app.get("/audioinformation")
 async def get_audio_information(id: int, sessionId: int=-1, username: str=""):
-    selections = tt_instance.data["selections"]
+    selections = tt_instance.track_data["tracks"]
     id_str = str(id)
     res = None
     if (id_str in selections):
@@ -104,7 +124,9 @@ async def is_session_active(session_id: int):
 @validate_call
 @app.post("/createplaylist")
 async def create_playlist(info: PlaylistCreationData):
-    return trackman_instance.create_playlist(info)
+    res = trackman_instance.create_playlist(info)
+    print(res)
+    return res
 
 @app.post("/deleteplaylist")
 async def delete_playlist(info: PlaylistDeletionData):
@@ -115,8 +137,20 @@ async def get_playlists(username: str):
     return trackman_instance.get_playlists(username)
 
 @app.get("/playlist")
-async def get_playlist(id: int):
-    return trackman_instance.get_playlist(id)
+async def get_playlist(id: int, session_id: int=-1, username: str=""):
+    res = trackman_instance.get_playlist(id)
+
+    if (session_id != -1 and username != ""):
+        track_ids = []
+
+        for track in res["playlist"]["tracks"]:
+            track_ids.append(track["track_id"])
+
+        progress = trackman_instance.get_track_progress_array(track_ids, username, session_id)
+        res["track_progress_data"] = progress["track_progress_data"]
+
+    print(res)
+    return res
 
 @app.post("/addtracktoplaylist")
 async def add_track_to_playlist(info: PlaylistModifyData):
@@ -130,6 +164,36 @@ async def remove_track_from_playlist(info: PlaylistModifyData):
 async def get_voice_options():
     return {"message": "voices", "voices": list(tt_instance.clone_voices.keys())}
 
-# if __name__ == "__main__":
-#     uvicorn.run(app, host="0.0.0.0", port=8080)
-    
+@app.post("/createbookmark")
+async def create_bookmark(info: BookmarkCreateData):
+    return user_instance.create_bookmark(info)
+
+@app.get("/getbookmarks")
+async def get_bookmarks(username: str):
+    return user_instance.get_bookmarks(username)
+
+@app.post("/removebookmark")
+async def remove_bookmark(info: BookmarkCreateData):
+    return user_instance.remove_bookmark(info)
+
+@app.get("/getbookdata")
+async def get_book_data(book_id: int, username: str="", session_id: int=-1):
+    res = trackman_instance.get_book_data(book_id)
+    if (session_id != -1):
+        track_ids = []
+
+        for chapter in res["data"]["chapters"]:
+            track_ids.append(chapter["chapter_track_id"])
+        
+        progress = trackman_instance.get_track_progress_array(track_ids, username, session_id)
+        res["track_progress_data"] = progress["track_progress_data"]
+
+    return res
+
+@app.post("/posttrackprogress")
+async def upload_track_progress(info: UpdateTrackProgressData):
+    return trackman_instance.set_track_progress(info)
+
+@app.get("/gettrackprogressarray")
+async def get_track_progress_array(tracks: list[int], username: str, session_id: str):
+    return trackman_instance.get_track_progress_from_array(tracks)
