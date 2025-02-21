@@ -1,4 +1,4 @@
-from book_scraper import Wikipedia
+from scrapers.wikipedia import Wikipedia
 import soundfile as sf
 from concurrent.futures import ThreadPoolExecutor
 import threading
@@ -14,95 +14,16 @@ from gradio_client import Client, handle_file
 import atexit
 import time
 from dotenv import load_dotenv
- 
+from text_filter import filter_seq
+
 OUT_FILE = "fin.wav"
 INITIAL_FILE = "0"
 
-def do_quote_text(text: str) -> str:
-        quote_text_stuff = [
-            "stating",
-            "stating",
-            "called the",
-            "saying"
-        ]
-
-        already_defined_areas = []
-        addition_match = ".{0,30}\".*\""
-        lower_text = text.lower()
-        for express in quote_text_stuff:
-            for match in re.findall(express + addition_match, lower_text):
-                match_index = lower_text.index(match)
-                match_index_a = match_index + match.index("\"")
-                match_index_b = match_index + len(match) - 1
-                
-                area_already_defined = False
-
-                for defined_area in already_defined_areas:
-                    if (match_index_a < defined_area[1] and match_index_a > defined_area[0] or
-                        match_index_b < defined_area[1] and match_index_b > defined_area[0]):
-                        area_already_defined = True
-
-                if (area_already_defined):
-                    continue
-
-                text = text[:match_index] + text[match_index:match_index_a] + "Quote, " + text[match_index_a + 1:match_index_b] + ", End Quote" + text[match_index_b + 1:]
-
-        return text
-
-def remove_pattern(text: str, match: str):
-    while (match in text and (index := text.index(match)) > 0):
-        a = text[:index]
-        b = text[index + len(match):]
-        
-        text = a + b
-
-    return text
-
-def split_text(chapter_text: str, split_character: str=".") -> list[str]:
-    TOKEN_LIMIT = 150
-
-    chapter_text = remove_pattern(chapter_text, "[...]")
-    # chapter_text = do_quote_text(chapter_text)
-    sentence_split = chapter_text.split(split_character)
-    current_merged_sentence: str | None = None
-    res = []
-
-    i = 0
-    
-    while (i < len(sentence_split)):
-        sentence = sentence_split[i].strip()
-
-        if (current_merged_sentence is None):
-            current_merged_sentence = sentence
-            i += 1
-            continue
-
-        if (len(current_merged_sentence) + len(sentence) <= TOKEN_LIMIT):
-            current_merged_sentence += split_character + " " + sentence
-
-        else:
-            if (len(current_merged_sentence) > TOKEN_LIMIT):
-                res.extend(split_text(current_merged_sentence, ","))
-                current_merged_sentence = sentence
-            else:
-                res.append(current_merged_sentence + split_character)
-                current_merged_sentence = sentence
-                # print(current_merged_sentence, sentence)
-        
-        i += 1
-
-    if (current_merged_sentence is not None):
-        res.append(current_merged_sentence + split_character)
-
-    i = 0
-
-    return res
-        
 class BookTTS:
     INSTANCE = None
     MODEL_TYPE = "xtts"
     NUM_THREADS = 2
-    DEBUG_LIMIT = 5
+    DEBUG_LIMIT = -1
     CURRENT_BOOK_ID = 0
     CURRENT_TRACK_ID = 0
     VOICE_FILE = "./input/espvolt.wav"
@@ -123,34 +44,6 @@ class BookTTS:
 
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 self.tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
-            elif (BookTTS.MODEL_TYPE == "f5"):
-                self.f5_proc = subprocess.Popen("f5-tts_infer-gradio")
-
-                def cleanup():
-                    self.f5_proc.terminate()
-                    self.f5_proc.wait()
-
-                atexit.register(cleanup)
-                while (True):
-                    try:
-                        self.gradio_client = Client("http://127.0.0.1:7860/")
-                        break
-
-                    except Exception as e:
-                        print(e)
-                        print("Waiting on gradio webserver\n")
-                        time.sleep(5)
-
-            elif (BookTTS.MODEL_TYPE == "suno"):
-                from bark import SAMPLE_RATE, generate_audio, preload_models
-                from scipy.io.wavfile import write as write_wav
-
-                self.generate_audio = generate_audio
-                self.write_wav = write_wav
-                self.SAMPLE_RATE = SAMPLE_RATE
-                print("LOADING")
-                preload_models()
-                print("OOPS")
 
             elif (BookTTS.MODEL_TYPE == "elabs"):
                 from elevenlabs.client import ElevenLabs
@@ -253,38 +146,6 @@ class BookTTS:
                 sf.write(f"./output/{index}.wav", wav, 24000)
                 finished_files[index] = text
 
-        elif (BookTTS.MODEL_TYPE == "f5"):
-            # self.gradio_client # TODO
-            data = self.f5(text=text, speaker=clone_voice)
-
-            file = data[0]
-            with self.lock:
-                os.rename(file, f"./output/{index}.wav")
-                finished_files[index] = text
-
-        elif (BookTTS.MODEL_TYPE == "suno"):
-            audio_array = self.generate_audio(text)
-            
-            with self.lock:
-                self.write_wav(f"./output/{index}.wav", self.SAMPLE_RATE, audio_array)
-                finished_files[index] = text
-
-        elif (BookTTS.MODEL_TYPE == "elabs"):
-            stream = self.client.text_to_speech.convert_as_stream(
-                text=text,
-                voice_id="JBFqnCBsd6RMkjVDRZzb",
-                model_id="eleven_multilingual_v2",
-            )
-
-            with open(f"./output/{index}.mp3", "wb") as f:
-                for chunk in stream:
-                    if (isinstance(chunk, bytes)):
-                        f.write(chunk)
-
-            with self.lock:
-                finished_files[index] = text
-
-
     def worker_thread(self, book: Book):
         with self.lock:
             self.busy = True
@@ -300,7 +161,6 @@ class BookTTS:
             return
         
         final_book_obj = {"title": book.title, "chapters": [], "tags": book.tags}
-
         self.current_book = book
 
         this_book_id = BookTTS.CURRENT_BOOK_ID
@@ -309,46 +169,22 @@ class BookTTS:
             BookTTS.CURRENT_BOOK_ID += 1
 
         for chapter in book.chapters:
-            finished_files = {}
-            split = []
-
             self.current_book_chapter = chapter
-
-            if (BookTTS.MODEL_TYPE == "f5" or BookTTS.MODEL_TYPE == "elabs"):
-                split = [chapter.text]
-            else:
+            current_file = 0
+            
+            for section in chapter.text_sections:
+                reader, text = section.reader, section.text
+                
+                current_chapter_finished_files = {}
                 if (BookTTS.DEBUG_LIMIT > 0):
-                    split = split_text(chapter.text)[:BookTTS.DEBUG_LIMIT]
+                    split_text = filter_seq(text)[:BookTTS.DEBUG_LIMIT]
                 else:
-                    split = split_text(chapter.text)
-
-            
-            i = 0
-            while (i < len(split)):
-                found = False
-                for j in split[i]:
-                    if (j.isalnum()):
-                        found = True
-                        break
-
-                if (found):
-                    i += 1
-                    continue
-
-                if (split[i].strip("\"") == "."):
-                    split.pop(i)
-                    i -= 1
-                i += 1
-
-            while (True):
-                if (len(finished_files) == len(split)):
-                    break
-            
-                self.current_book_chapter_progress = len(finished_files) / len(split)
-                with ThreadPoolExecutor(max_workers=BookTTS.NUM_THREADS) as executor:
-                    for i, t in enumerate(split):
-                        if (i not in finished_files):
-                            _ = executor.submit(self._worker_thread, i, t, book.voice_clone, finished_files) # dont actually need the future
+                    split_text = filter_seq(text)
+                
+                while (len(current_chapter_finished_files) != len(split_text)):
+                    with ThreadPoolExecutor(max_workers=BookTTS.NUM_THREADS) as exec:
+                        for current_text in split_text:
+                            _ = exec.submit(self._worker_thread, current_file, current_text, reader, current_chapter_finished_files)
 
             fileman.safe_create_folder(book_folder)
 
@@ -380,6 +216,14 @@ class BookTTS:
         with open("./data/books.json", "w") as f:
             json.dump(self.book_data, f, indent=4)
 
+    def _does_book_exist(self, book: Book):
+        book_folder_name = "_".join(book.tags).upper() + "_" + "_".join(book.title.upper().split(" "))
+        book_folder = "./public/" + book_folder_name
+
+        path = pathlib.Path(book_folder)
+
+        return path.exists()
+    
     def _move_chapter(self, parent_folder: str, book: Book, book_id: int, chapter: Chapter, chapter_length: float):
         with self.lock:
             filename = parent_folder + "/" + chapter.title + ".wav"
@@ -418,10 +262,13 @@ class BookTTS:
     def is_busy(self):
         return self.busy
     
-    def start_wikipedia(self, site_link: str):
-        self.start_text(Wikipedia.scrape(site_link))
+    def start_wikipedia(self, site_link: str) -> bool:
+        book = Wikipedia.scrape(site_link)
+        if (self._does_book_exist(book)):
+            return False
+        self.start_text(book)
         print("STARTING WIKIPEDIA ARTICLE")
-
+        return True
     def start_text(self, selection_data):
         self.queue.append(selection_data)
         self._update()

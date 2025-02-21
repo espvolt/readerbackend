@@ -23,7 +23,7 @@ app.add_middleware(
 )
 
 # tt_instance = TTSingle.get_instance()
-tt_instance = BookTTS.get_instance(True)
+tt_instance = BookTTS.get_instance(dummy=True)
 user_instance = UserMan.get_instance()
 trackman_instance = Trackman.get_instance()
 
@@ -197,3 +197,14 @@ async def upload_track_progress(info: UpdateTrackProgressData):
 @app.get("/gettrackprogressarray")
 async def get_track_progress_array(tracks: list[int], username: str, session_id: str):
     return trackman_instance.get_track_progress_from_array(tracks)
+
+@app.post("/requestbook")
+async def request_book(info: RequestBookData):
+    if (not user_instance.does_session_exist(info.username, info.session_id)):
+        return ErrorMessages.INVALID_SESSION
+    
+    if (info.book_type == "wikipedia"):
+        started = tt_instance.start_wikipedia(info.book_link)
+        
+        return {"message": "check success", "success": started}
+    

@@ -25,6 +25,8 @@ def merge_output_wav():
             first = first.append(AudioSegment.from_wav(f"./output/{file}"))
 
     first.export(f"./output/{OUT_FILE}", format="wav")
+    return len(first) / 1000
+
 
 def merge_output_mp3():
     first: AudioSegment = AudioSegment.from_mp3(f"./output/{INITIAL_FILE}.mp3")

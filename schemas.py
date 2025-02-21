@@ -81,3 +81,10 @@ class UpdateTrackProgressData(BaseModel):
     username: str
     track_id: int
     progress: float    
+
+class RequestBookData(BaseModel):
+    book_link: str
+    book_type: str
+    voice_model: str
+    session_id: int
+    username: str

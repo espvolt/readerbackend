@@ -1,21 +1,9 @@
-from bs4 import BeautifulSoup, Tag
+from book import Book, Chapter, ChapterTextSection, output_book
+from bs4 import Tag, BeautifulSoup
 import requests
-from book import Book, Chapter
-import re
-# import book_tts
 
-import logging
-import http.client
-
-
-# You must initialize logging, otherwise you'll not see debug output.
-# http.client.HTTPConnection.debuglevel = 1
-# logging.basicConfig()
-# logging.getLogger().setLevel(logging.DEBUG)
-# requests_log = logging.getLogger("requests.packages.urllib3")
-# requests_log.setLevel(logging.DEBUG)
-# requests_log.propagate = True
-
+POSSIBLE_TITLE_LOCATIONS = ("mw-page-title-main", "mw-first-heading")
+INVALID_CHAPTER_TITLES = ("see also", "references", "notes")
 
 class Wikipedia:
     def _decompose_references(tag: Tag):
@@ -31,6 +19,11 @@ class Wikipedia:
             tag_: Tag = y
             tag_.find_parent("sup").decompose()
 
+    def _convert_abbr(tag: Tag):
+        for y in tag.find_all(name="abbr"):
+            tag_: Tag = y
+            tag_.string.replace_with(tag_["title"])
+
     def scrape(site_link: str, voice_clone: str="espvolt", additional_tags: list=[]):
         resp = requests.get(site_link)
 
@@ -39,14 +32,26 @@ class Wikipedia:
         
         soup = BeautifulSoup(resp.content, "html.parser")
 
-        book_title = soup.find_all(class_="mw-page-title-main")[0].text
+        # find title
+
+        book_title: str | None = None
+
+        for location in POSSIBLE_TITLE_LOCATIONS:
+            _temp: list[Tag] = soup.find_all(class_=location)
+
+            if (len(_temp) > 0):
+                book_title = _temp[0].text
+
+        if (book_title is None):
+            book_title = site_link
+
         bodyContent = soup.find(class_="mw-content-ltr")
 
         chapters = []
 
-        current_chapter = Chapter("Introduction", "")    
+        current_chapter = Chapter("Introduction", [])
         current_traversal = bodyContent.findChildren(recursive=False)
-
+        current_text = ""
         traveral_finished = False
 
         while not traveral_finished:
@@ -58,9 +63,9 @@ class Wikipedia:
                     print("ERROR")
                     break
                     pass
-
+                
                 Wikipedia._decompose_references(tag)
-
+                Wikipedia._convert_abbr(tag)
                 if (tag.name == "style" or tag.name == "figure"):
                     continue
                 if (tag.name == "table" and tag["class"] is not None and "infobox" in tag["class"]):
@@ -79,15 +84,17 @@ class Wikipedia:
                 if (tag.name == "div" and tag["class"] is not None and "mw-heading" in tag["class"]):
                     Wikipedia._decompose_edit_section(tag)
                     
-                    if ("mw-heading2" in tag["class"]):
+                    if ("mw-heading2" in tag["class"]): # Chapter Change
+                        current_chapter.text_sections.append(ChapterTextSection(voice_clone, current_text))
                         chapters.append(current_chapter)
                         current_chapter = None
+                        current_text = ""
 
-                        if (tag.text.lower().strip() == "see also" or tag.text.lower().strip() == "references"):
+                        if (tag.text.lower().strip() in INVALID_CHAPTER_TITLES):
                             traveral_finished = True
                             break
                         
-                        current_chapter = Chapter(tag.text, "")
+                        current_chapter = Chapter(tag.text, [])
 
                 if (tag.get("role") is not None and tag["role"] == "note"):
                     continue
@@ -105,22 +112,42 @@ class Wikipedia:
                         clean_text += str(index) + ", " + x.text + ". "
                         index += 1
 
+                if (tag.name == "blockquote" and "templatequote" in tag["class"]):
+                    quote_tag = tag.findChild(class_="templatequotecite")
+                    quote_text  = quote_tag.text
+                    quote_tag.decompose()
 
+                    clean_text = tag.text.strip()
+                    
+                    if (not clean_text.endswith(".")):
+                        clean_text += "."
+
+                    current_text += clean_text
+
+                    clean_text = quote_text.strip()
+                    if (clean_text.startswith("—")): # remove the dash from the quote text
+                        clean_text = clean_text[1:].strip()
+
+                    clean_text = "From " + clean_text
+
+                    if (not clean_text.endswith(".")):
+                        clean_text += "."
+
+                    current_text += clean_text
+                
+                    continue
+                    
                 if (not clean_text.endswith(".")):
                     clean_text += ". "
 
-                current_chapter.text += clean_text
+                current_text += clean_text
 
-        if ( current_chapter is not None):
+        if (current_chapter is not None):
+            current_chapter.text_sections.append(ChapterTextSection(voice_clone, current_text))
             chapters.append(current_chapter)
                 
-        return Book(book_title, voice_clone, ["wikipedia"] + additional_tags, chapters)
-    
+        return Book(book_title, voice_clone, ["wikipedia"] + additional_tags, chapters)    
 
 
 if __name__ == "__main__":
-    import book_tts
-    book: Book = Wikipedia.scrape("https://en.wikipedia.org/wiki/Astral_projection")
-    for chapter in book.chapters:
-        with open(f"./test/{chapter.title}", "w", encoding="utf-8") as f:
-            f.writelines(chapter.text.split("."))
+    pass    
